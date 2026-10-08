@@ -10,12 +10,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Find Flutter project
+      - name: Extract project
         run: |
-          mkdir -p extracted
+          mkdir extracted
           unzip -q ./*.zip -d extracted
           PROJECT_DIR=$(dirname "$(find extracted -name pubspec.yaml -print -quit)")
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
@@ -31,21 +30,41 @@ jobs:
         with:
           channel: stable
 
-      - name: Install dependencies
+      - name: Flutter dependencies
         working-directory: ${{ env.PROJECT_DIR }}
         run: flutter pub get
 
-      - name: Build signed APK
+      - name: Build APK
         working-directory: ${{ env.PROJECT_DIR }}
         run: flutter build apk --release
 
-      - name: Verify APK
+      - name: Sign APK
+        working-directory: ${{ env.PROJECT_DIR }}
         run: |
-          ls -lh "${{ env.PROJECT_DIR }}/build/app/outputs/flutter-apk/app-release.apk"
-          jarsigner -verify "${{ env.PROJECT_DIR }}/build/app/outputs/flutter-apk/app-release.apk" || true
+          keytool -genkeypair \
+            -v \
+            -keystore release-key.jks \
+            -alias aronadmin \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -storepass android \
+            -keypass android \
+            -dname "CN=Aron Moments Admin"
 
-      - name: Upload APK
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -1)
+
+          "$APKSIGNER" sign \
+            --ks release-key.jks \
+            --ks-pass pass:android \
+            --key-pass pass:android \
+            build/app/outputs/flutter-apk/app-release.apk
+
+          "$APKSIGNER" verify --verbose \
+            build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Upload signed APK
         uses: actions/upload-artifact@v4
         with:
-          name: aron-moments-apk
+          name: aron-moments-admin-signed
           path: ${{ env.PROJECT_DIR }}/build/app/outputs/flutter-apk/app-release.apk
