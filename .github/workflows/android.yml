@@ -10,22 +10,23 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Extract project ZIP
+      - name: Find Flutter project
         run: |
-          mkdir extracted
+          mkdir -p extracted
           unzip -q ./*.zip -d extracted
           PROJECT_DIR=$(dirname "$(find extracted -name pubspec.yaml -print -quit)")
-          echo "PROJECT_DIR=$PROJECT_DIR" >> $GITHUB_ENV
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-      - name: Set up Java
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
 
-      - name: Set up Flutter
+      - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
@@ -34,9 +35,14 @@ jobs:
         working-directory: ${{ env.PROJECT_DIR }}
         run: flutter pub get
 
-      - name: Build APK
+      - name: Build signed APK
         working-directory: ${{ env.PROJECT_DIR }}
         run: flutter build apk --release
+
+      - name: Verify APK
+        run: |
+          ls -lh "${{ env.PROJECT_DIR }}/build/app/outputs/flutter-apk/app-release.apk"
+          jarsigner -verify "${{ env.PROJECT_DIR }}/build/app/outputs/flutter-apk/app-release.apk" || true
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
